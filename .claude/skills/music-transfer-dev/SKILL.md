@@ -5,7 +5,7 @@ description: Test, run, live-check and build the music-transfer app (Spotify ↔
 
 # music-transfer: develop and check
 
-Project: `C:\Users\theme\.claude\workspace\music-transfer`; run everything from there. General test rules: the shared `testing` skill. Module map and service contract: `docs\development.md`.
+Project: the repository folder (the one with `CLAUDE.md`); run everything from there. General test rules: the shared `testing` skill. Module map and service contract: `docs\development.md`.
 
 ## Tests
 

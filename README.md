@@ -7,7 +7,7 @@ Music Transfer is a Windows desktop app (Python 3.12, PySide6, Russian UI) that 
 ## Quick start
 
 ```powershell
-cd $env:USERPROFILE\.claude\workspace\music-transfer
+cd music-transfer   # the repository folder
 .venv\Scripts\python.exe -m pytest -q
 .venv\Scripts\python.exe main.py   # «Войти» for each service; Spotify asks for its Client ID once
 ```
