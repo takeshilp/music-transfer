@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — 2026-10-27
+
+- «Откуда» and «Куда» each take a full row, so account names like «Spotify · ник» are no longer cut; the results table got wider too.
+- The first release delivered through «Проверить обновление».
+
 ## 0.2.0 — 2026-10-27
 
 - «Проверить обновление»: downloads the latest GitHub release, checks it and installs it silently, then the app starts again.

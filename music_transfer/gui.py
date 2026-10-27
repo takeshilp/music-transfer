@@ -234,9 +234,13 @@ class MainWindow(QMainWindow):
         self.src.activated.connect(self._refresh)
         self.dst.activated.connect(self._refresh)
         self.reload.clicked.connect(self._load_playlists)
-        pick = QHBoxLayout()
-        for w in (QLabel("Откуда:"), self.src, QLabel("Куда:"), self.dst, self.reload):
-            pick.addWidget(w)
+        pick = QGridLayout()  # one row each, full width: "Spotify · <nick>" is not cut
+        pick.addWidget(QLabel("Откуда:"), 0, 0)
+        pick.addWidget(self.src, 0, 1)
+        pick.addWidget(self.reload, 0, 2)  # reloads the source's playlists
+        pick.addWidget(QLabel("Куда:"), 1, 0)
+        pick.addWidget(self.dst, 1, 1, 1, 2)
+        pick.setColumnStretch(1, 1)
         self.list = QListWidget()
         self.list.itemChanged.connect(self._invalidate)
         all_on, all_off = QPushButton("Выбрать все"), QPushButton("Снять все")
