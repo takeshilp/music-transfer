@@ -1,8 +1,8 @@
-# music-transfer
+# Music Transfer
 
 ## What it is
 
-A Windows desktop app (Python 3.12, PySide6, Russian UI) that copies playlists and liked tracks between Spotify and Yandex Music in either direction, or from an old account to a new one on the same service, for the user and a few friends on their own PCs. It only ever creates new playlists (and, when moving accounts, follows the playlists you tick); existing ones are never changed. Status: GUI done and tested offline (milestone 3), with login from the window (Yandex by a device code, Spotify Client ID typed into the window); next is the live check on real accounts (milestone 4), then a packaged build (milestone 5).
+Music Transfer is a Windows desktop app (Python 3.12, PySide6, Russian UI) that copies playlists and liked tracks between Spotify and Yandex Music in either direction, or from an old account to a new one on the same service, for the user and a few friends on their own PCs. It only ever creates new playlists (and, when moving accounts, follows the playlists you tick); existing ones are never changed. Status: works on real accounts (login, search); installer and self-update published as [GitHub releases](https://github.com/takeshilp/music-transfer/releases). Writes to real accounts are still being checked.
 
 ## Quick start
 

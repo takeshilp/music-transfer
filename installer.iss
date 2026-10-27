@@ -1,5 +1,5 @@
 ﻿; One setup.exe from the PyInstaller folder dist\MusicTransfer. Built by build.ps1; saved as UTF-8 with BOM (Cyrillic).
-#define AppName "Перенос плейлистов"
+#define AppName "Music Transfer"
 #ifndef AppVersion
   #error Pass the version: ISCC /DAppVersion=<music_transfer.__version__> (build.ps1 does)
 #endif
@@ -15,6 +15,8 @@ PrivilegesRequired=lowest
 DefaultDirName={autopf}\Music Transfer
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
+; follow AppName on upgrades instead of keeping the Start-menu folder of the first install
+UsePreviousGroup=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=dist
@@ -34,6 +36,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\MusicTransfer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; the owner's Spotify client ID, so friends only press «Войти»; an upgrade keeps the one already there
 Source: "config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist skipifsourcedoesntexist
+
+[InstallDelete]
+; shortcuts of versions before 0.2.2, when the app was called «Перенос плейлистов»
+Type: files; Name: "{autodesktop}\Перенос плейлистов.lnk"
+Type: filesandordirs; Name: "{autoprograms}\Перенос плейлистов"
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"

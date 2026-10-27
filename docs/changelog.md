@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 — 2026-10-28
+
+- The app is called Music Transfer: window title, Start-menu and desktop shortcuts, the entry in Windows «Приложения». The update removes the old «Перенос плейлистов» shortcuts.
+- The «Откуда» / «Куда» lists open below the box, rounded and dark like the rest of the window, without the bright green highlight.
+- Installers left in `%TEMP%` by past updates are removed at start.
+
 ## 0.2.1 — 2026-10-27
 
 - «Откуда» and «Куда» each take a full row, so account names like «Spotify · ник» are no longer cut; the results table got wider too.

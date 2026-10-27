@@ -153,7 +153,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"Перенос плейлистов {__version__} — Spotify ↔ Яндекс Музыка")
+        self.setWindowTitle(f"Music Transfer {__version__} — Spotify ↔ Яндекс Музыка")
         self.resize(1100, 750)
         try:
             cid = str(load_config().get("spotify_client_id") or "").strip()
@@ -231,6 +231,8 @@ class MainWindow(QMainWindow):
         g.setColumnStretch(2, 1)
 
         self.src, self.dst, self.reload = QComboBox(), QComboBox(), QPushButton("Обновить")
+        for combo in (self.src, self.dst):
+            theme.round_popup(combo)
         self.src.activated.connect(self._refresh)
         self.dst.activated.connect(self._refresh)
         self.reload.clicked.connect(self._load_playlists)

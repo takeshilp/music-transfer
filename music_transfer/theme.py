@@ -5,8 +5,9 @@ from the app-level rules (pyside6-desktop, QSS rules 1 and 27)."""
 import ctypes, sys
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QStyledItemDelegate
 
 ASSETS = Path(__file__).resolve().parent / "assets"  # svg icons the stylesheet points at; ship with the build
 
@@ -44,13 +45,15 @@ QLineEdit, QComboBox {
 QLineEdit:hover, QComboBox:hover { border-color: #535353; }
 QLineEdit:focus, QComboBox:focus { border-color: #1db954; }
 QLineEdit:disabled, QComboBox:disabled { color: #6a6a6a; background: #1c1c1c; border-color: #262626; }
-QComboBox { min-width: 120px; }
+QComboBox { min-width: 120px; combobox-popup: 0; }  /* the list opens below the box, not over it */
 QComboBox::drop-down { border: none; width: 26px; }
 QComboBox::down-arrow { image: url("@ASSETS/chevron.svg"); width: 10px; height: 10px; }
+QComboBox QFrame { background: transparent; border: none; }  /* the popup window around the list (round_popup) */
 QComboBox QAbstractItemView {
-    background: #282828; color: #ffffff; border: 1px solid #3a3a3a; padding: 4px;
-    selection-background-color: #3e3e3e; selection-color: #ffffff; outline: none;
+    background: #282828; color: #ffffff; border: 1px solid #3a3a3a; border-radius: 8px; padding: 4px; outline: none;
 }
+QComboBox QAbstractItemView::item { padding: 6px 10px; border-radius: 6px; }
+QComboBox QAbstractItemView::item:hover, QComboBox QAbstractItemView::item:selected { background: #3e3e3e; color: #ffffff; }
 
 QListWidget, QTableWidget { background: transparent; border: none; color: #ffffff; outline: none; }
 QListWidget::item { padding: 7px 8px; border-radius: 6px; }
@@ -114,6 +117,15 @@ def apply(app):
     app.setFont(QFont("Segoe UI", 10))
     app.setPalette(_palette())
     app.setStyleSheet(QSS.replace("@ASSETS", ASSETS.as_posix()))
+
+
+def round_popup(combo):
+    """A combo box's list opens in a window of its own, square unless it is frameless and see-through; then the
+    stylesheet's rounded list shows. The default delegate also ignores the ::item rules."""
+    combo.setItemDelegate(QStyledItemDelegate(combo))
+    popup = combo.view().window()
+    popup.setWindowFlags(popup.windowFlags() | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
+    popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
 
 def dark_title_bar(window):
