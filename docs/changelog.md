@@ -6,8 +6,8 @@
 - The «Откуда» / «Куда» lists open below the box, rounded and dark like the rest of the window, without the bright green highlight.
 - New playlists are public on both services; Yandex ones used to be private. Spotify does not let apps make private playlists, so both now behave the same; close one by hand in the service's app if needed.
 - Installers left in `%TEMP%` by past updates are removed at start.
-- «Отмена» for «Найти треки» and «Перенести». A search stops right away, rate-limit waits included, and drops its results. A transfer finishes the playlist being written, shows which playlists were created, and «Перенести» continues with the rest.
-- A track the search missed (or matched wrong) can be fixed by hand before «Перенести»: double-click its row and choose from the target service's search results (edit the artist or title and «Искать» again if needed), or «Не переносить». Picked rows say «вручную», get the same pick in every playlist, and are left out of the not-found CSV; region-blocked tracks are listed but cannot be chosen.
+- «Отмена» for «Найти треки» and «Перенести». A search stops right away, rate-limit waits included, and drops its results. A transfer finishes the playlist being written (the status says so at once), shows which playlists were created, and «Перенести» continues with the rest; with a single playlist there is nothing to stop, so no «Отмена».
+- A track the search missed (or matched wrong) can be fixed by hand before «Перенести»: double-click its row and choose from the target service's search results (when artist and title find nothing, it also searches the title alone, since the target may credit another artist; edit the artist or title and «Искать» again if needed), or «Не переносить». Picked rows say «вручную», get the same pick in every playlist, and are left out of the not-found CSV; region-blocked tracks are listed but cannot be chosen.
 
 ## 0.2.1 — 2026-10-27
 

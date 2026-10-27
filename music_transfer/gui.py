@@ -398,14 +398,14 @@ class MainWindow(QMainWindow):
     def _cancel(self):
         self.stop.set()
         self.cancel_btn.setEnabled(False)  # the run stops at its next step; a playlist being written is finished first
-        self.status.setText("Отмена…")
+        self.status.setText(self.stopping)
 
-    def _run(self, text, fn, on_done=lambda _: None, stop=None):
+    def _run(self, text, fn, on_done=lambda _: None, stop=None, stopping="Отмена…"):
         """stop: a threading.Event the work checks; «Отмена» is shown only when it is given (logins, find, transfer).
-        A cancelled run ends with on_done(None)."""
+        stopping: the status once «Отмена» is pressed. A cancelled run ends with on_done(None)."""
         if self.worker:
             self.worker.wait()  # the last thread may still be returning from run(); dropping it while running aborts the process
-        self.on_done, self.worker, self.stop = on_done, (w := Worker(fn, stop)), stop
+        self.on_done, self.worker, self.stop, self.stopping = on_done, (w := Worker(fn, stop)), stop, stopping
         for s in self.services:  # services call on_wait from the worker thread
             s.stop = stop  # reset on every run, so a set event never leaks into the next one
             s.on_wait = lambda host, sec: w.progress.emit(f"Ожидание {host}: {ceil(sec)} с", 0, 0)
@@ -731,9 +731,13 @@ class MainWindow(QMainWindow):
         def work(progress):
             found = dst.search(artist, strip_tags(title)) if artist or title else []
             progress("Поиск вариантов", 0, 0)  # raises Cancelled if «Отмена» came during the request
-            return found
+            if found or not (artist and title):
+                return found, artist
+            found = dst.search("", strip_tags(title))  # the target may credit someone else (seen live: a soundtrack)
+            progress("Поиск вариантов", 0, 0)
+            return found, "" if found else artist  # the dialog shows the query that gave its list
         self._run("Поиск вариантов…", work,
-                  lambda found: self._count() if found is None else self._show_pick(row, artist, title, found),
+                  lambda r: self._count() if r is None else self._show_pick(row, r[1], title, r[0]),
                   threading.Event())  # «Отмена» leaves the status empty, so restore it
 
     def _show_pick(self, row, artist, title, found):
@@ -773,10 +777,13 @@ class MainWindow(QMainWindow):
         def work(progress):
             write_jobs(jobs, dst, lambda d, n: progress("Создание плейлистов", d, n))
             for i, p in enumerate([] if done else follows):  # a repeated follow is harmless, so a rerun does them all
+                progress("Подписки", i, len(follows))  # before the follow: «Отмена» during the last one is not a cancel
                 dst.follow(p)
-                progress("Подписки", i + 1, len(follows))
             return True
-        self._run("Создание плейлистов…", work, lambda ok: self._written(dst, ok), threading.Event())
+        steps = sum(j.added is None for j in jobs) + (0 if done else len(follows))
+        self._run("Создание плейлистов…", work, lambda ok: self._written(dst, ok),
+                  threading.Event() if steps > 1 else None,  # a started playlist is never cut: one step has nothing to stop
+                  "Остановка: начатый плейлист допишется, следующие не начнутся.")
 
     def _written(self, dst, ok):
         """ok is None after «Отмена»: written jobs keep `added`, so «Перенести» goes on with the rest."""

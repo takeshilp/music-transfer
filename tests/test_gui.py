@@ -464,6 +464,7 @@ def test_cancelled_transfer_finishes_the_current_playlist_and_rerun_continues(se
     ya.create_playlist = create
     w.go_btn.click()
     w.cancel_btn.click()
+    assert "начатый плейлист допишется" in w.status.text()
     settle(w)
     assert ya.created == [("Любимые треки", ["y1"])]
     assert column(w, 1) == ["1", "не создан"]
@@ -477,21 +478,58 @@ def test_cancelled_transfer_finishes_the_current_playlist_and_rerun_continues(se
 def test_cancel_during_the_last_playlist_reports_done(services, dialogs):
     sp, ya = services
     w = window()
-    w.list.item(0).setCheckState(Qt.CheckState.Checked)
+    tick_all(w)
     w.find_btn.click()
     settle(w)
-    real = ya.create_playlist
+    real, entered = ya.create_playlist, []
 
     def create(name, tracks):
-        assert w.stop.wait(10)  # held until «Отмена»
+        entered.append(name)
+        if name == "P":
+            assert w.stop.wait(10)  # held until «Отмена»
         return real(name, tracks)
     ya.create_playlist = create
     w.go_btn.click()
+    wait_for(lambda: "P" in entered)
     w.cancel_btn.click()
     settle(w)
-    assert ya.created == [("Любимые треки", ["y1"])]
+    assert [n for n, _ in ya.created] == ["Любимые треки", "P"]
     assert "Готово" in w.status.text() and "Отменено" not in w.status.text()
     assert not w.go_btn.isEnabled() and dialogs == []
+
+
+def test_one_playlist_left_offers_no_cancel(services, dialogs):
+    sp, ya = services
+    w = window()
+    w.list.item(0).setCheckState(Qt.CheckState.Checked)
+    w.find_btn.click()
+    settle(w)
+    w.go_btn.click()
+    assert w.cancel_btn.isHidden()  # a started playlist is never cut, so «Отмена» could stop nothing
+    settle(w)
+    assert ya.created == [("Любимые треки", ["y1"])] and "Готово" in w.status.text() and dialogs == []
+
+
+def test_pick_falls_back_to_the_title_when_the_target_credits_someone_else(services, dialogs):
+    sp, ya = services
+    ya.catalog.append(Track("y7", "Unknown Song", ["Someone Else"], 200000))
+    w = window()
+    tick_all(w)
+    w.find_btn.click()
+    settle(w)
+    assert column(w, 2)[1] == "не найдено"  # the matcher needs the same artist
+    real, asked = ya.search, []
+
+    def search(artist, title):
+        asked.append(artist)
+        return [] if artist else real(artist, title)
+    ya.search = search
+    w.table.activated.emit(w.table.model().index(1, 0))
+    settle(w)
+    d = w.picker
+    assert asked == ["Artist", ""] and d.artist.text() == "" and d.title.text() == "Unknown Song"
+    assert [d.list.item(i).text() for i in range(d.list.count())] == ["Someone Else — Unknown Song · 3:20"]
+    assert not any(ya.on_main) and dialogs == []
 
 
 def test_a_miss_is_picked_by_hand_for_every_copy_of_the_track(services, dialogs):
@@ -547,7 +585,7 @@ def test_pick_search_again_skip_cancel_and_merged_dedup(services, dialogs, monke
     w.table.activated.emit(w.table.model().index(1, 0))
     settle(w)
     first = w.picker
-    assert first.list.count() == 0
+    assert first.list.count() == 0 and first.artist.text() == "Artist"  # the title alone found nothing either
     first.title.setText(strip_tags("Группа крови"))
     first.search_btn.click()
     settle(w)
