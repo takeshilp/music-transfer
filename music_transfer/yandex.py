@@ -154,9 +154,10 @@ class YandexService:
     def search_isrc(self, isrc):
         return []  # Yandex has no ISRC search; ISRC is compared on the text-search results
 
-    def create_playlist(self, name, tracks, private=False):
-        """Creates a new playlist (public unless private); every write goes to the kind it just created."""
-        pl = self._call(self._client.users_playlists_create, name, visibility="private" if private else "public")
+    def create_playlist(self, name, tracks):
+        """Creates a new public playlist (like Spotify, which cannot make private ones); every write goes to the kind
+        it just created."""
+        pl = self._call(self._client.users_playlists_create, name, visibility="public")
         if pl is None:
             raise AppError("Яндекс Музыка не создала плейлист")
         kind, rev, at = pl.kind, pl.revision, 0

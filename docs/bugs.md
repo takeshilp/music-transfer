@@ -44,9 +44,9 @@ Entry format: Symptom → Cause → Fix → Verified (date, how).
 - Fix: `call_with_retry` recognizes this 429 (no headers, "Max Retries" in `msg`): writes (`write=True`) are never repeated, reads retry and then say "временно недоступен (ошибка сервера)" naming the host.
 - Verified 2026-10-27: same loopback experiment (500 on POST: 4 requests with the old config, 1 with `retries=0`); the `Max Retries` cases are covered in `tests/test_common.py` and `tests/test_spotify.py`.
 
-## Spotify ignores `public: false` when creating a playlist
+## Spotify playlists cannot be made private through the API
 
 - Symptom: live 2026-10-28 (0.2.1, Yandex → Spotify, 6/6 tracks) the playlist was created correctly but shown as public.
-- Cause: the create call ignores the flag.
-- Fix: the «Создавать закрытые плейлисты» check box; when private, Spotify gets a follow-up `PUT /playlists/{id}` before the tracks are added and Yandex gets `visibility="private"`; the default is now public on both.
-- Verified 2026-10-28: offline tests (`test_private_playlist_is_made_private_before_tracks_are_added` and others); whether the PUT sticks is not yet verified live.
+- Cause: Spotify ignores `public: false` on create (a GET right after returned `public: true`) and on a follow-up `PUT /playlists/{id}`.
+- Fix: none possible through the API. A «закрытые плейлисты» option (check box, then a switch) was tried and dropped at the user's choice; both services now create public playlists (Yandex ones used to be private), so the app behaves the same either way. A user who wants it private closes it in the Spotify app.
+- Verified 2026-10-28: live, from sources with the private option on: the Spotify client showed the new playlist as public (the user's check).

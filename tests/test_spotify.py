@@ -52,16 +52,6 @@ class FakeSp:
     def playlist_add_items(self, pid, ids):
         self.calls.append(("add", pid, len(ids)))
 
-    def playlist_change_details(self, pid, public=None):
-        self.calls.append(("change", pid, public))
-
-
-def test_private_playlist_is_made_private_before_tracks_are_added():
-    svc = SpotifyService(CID)
-    svc._sp = FakeSp()
-    svc.create_playlist("N", [Track("i", "s", ["a"])], private=True)
-    assert svc._sp.calls == [("create", "N", False), ("change", "NEW", False), ("add", "NEW", 1)]
-
 
 def test_create_playlist_chunks_to_the_new_playlist_only():
     svc = SpotifyService(CID)

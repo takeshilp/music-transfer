@@ -4,7 +4,7 @@
 
 - The app is called Music Transfer: window title, Start-menu and desktop shortcuts, the entry in Windows «Приложения». The update removes the old «Перенос плейлистов» shortcuts.
 - The «Откуда» / «Куда» lists open below the box, rounded and dark like the rest of the window, without the bright green highlight.
-- «Создавать закрытые плейлисты» in «Режим». New playlists are public by default on both services (Yandex ones used to be private); tick it to make them private. In Spotify the app marks the playlist private right after creating it, because Spotify ignores that on creation.
+- New playlists are public on both services; Yandex ones used to be private. Spotify does not let apps make private playlists, so both now behave the same; close one by hand in the service's app if needed.
 - Installers left in `%TEMP%` by past updates are removed at start.
 
 ## 0.2.1 — 2026-10-27

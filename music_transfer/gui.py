@@ -5,7 +5,7 @@ from PySide6.QtCore import QStandardPaths, Qt, QThread, QTimer, QUrl, Signal, Sl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QApplication, QDialog, QFileDialog, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
                                QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
-                               QCheckBox, QProgressBar, QPushButton, QRadioButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
+                               QProgressBar, QPushButton, QRadioButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
                                QWidget, QComboBox)
 
 from . import __version__, theme, update
@@ -258,9 +258,7 @@ class MainWindow(QMainWindow):
         self.name.setPlaceholderText(PER_NAME)
         self.merged.toggled.connect(self._mode_changed)
         self.name.textChanged.connect(self._update_buttons)
-        self.private = QCheckBox("Создавать закрытые плейлисты")
-        for w in (self.per, self.merged, self.name, self.private,
-                  _hint("Без галочки новые плейлисты будут открытыми — их видно в вашем профиле.")):  # nbsp: no line starts with the dash
+        for w in (self.per, self.merged, self.name):
             m.addWidget(w)
         self.find_btn, self.go_btn = QPushButton("Найти треки"), QPushButton("Перенести")
         for b in (self.find_btn, self.go_btn):
@@ -617,7 +615,6 @@ class MainWindow(QMainWindow):
     def _transfer(self):
         jobs, follows, dst, done = self.jobs, self.follows, self.dst.currentData(), self.followed_done
         name = self.name.text().strip()  # read now: it may have been edited after matching
-        private = self.private.isChecked()  # read now, like the name
         if self.merged.isChecked() and jobs:
             jobs[0].name = name
         elif name:
@@ -626,7 +623,7 @@ class MainWindow(QMainWindow):
                     job.name = name  # per-playlist mode: the liked tracks go to a playlist the user named
 
         def work(progress):
-            write_jobs(jobs, dst, lambda d, n: progress("Создание плейлистов", d, n), private=private)
+            write_jobs(jobs, dst, lambda d, n: progress("Создание плейлистов", d, n))
             for i, p in enumerate([] if done else follows):  # a repeated follow is harmless, so a rerun does them all
                 dst.follow(p)
                 progress("Подписки", i + 1, len(follows))

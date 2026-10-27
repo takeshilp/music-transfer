@@ -2,7 +2,7 @@
 
 Windows desktop app (Python + PySide6) that copies playlists and liked tracks between Spotify and Yandex Music, both directions. SoundCloud was dropped: its API needs an Artist Pro subscription. Original spec: `build-prompt.md` (kept as written, with its old paths; local only: git-ignored because the repository is public).
 
-Status: milestone 3 (GUI) is done and tested offline (core with fakes, window offscreen), including login from the window: Yandex by OAuth device code, Spotify Client ID typed in and saved to `config.json` after the first login; also moving to a second account of the same service (exact copy, liked tracks into a named playlist, subscriptions followed on request). The live check on real accounts is milestone 4: login and Yandex → Spotify search (2026-10-27) and a Yandex → Spotify transfer from the installed 0.2.1 (2026-10-28) work; writes to Yandex, following and the private switch are not yet tried live.
+Status: milestone 3 (GUI) is done and tested offline (core with fakes, window offscreen), including login from the window: Yandex by OAuth device code, Spotify Client ID typed in and saved to `config.json` after the first login; also moving to a second account of the same service (exact copy, liked tracks into a named playlist, subscriptions followed on request). The live check on real accounts is milestone 4: login and Yandex → Spotify search (2026-10-27) and a Yandex → Spotify transfer from the installed 0.2.1 (2026-10-28) work; the app's playlists come out public, and Spotify cannot make them private through the API (2026-10-28); writes to Yandex and following are not yet tried live.
 
 Paths below are relative to this folder.
 
@@ -19,7 +19,7 @@ Run from this folder:
 
 ## Rules
 
-- Never modify or delete existing playlists: the only writes are creating a new playlist and adding tracks to it, marking that new playlist private when «Создавать закрытые плейлисты» is ticked, and following (subscribing to) someone else's playlist the user ticked when moving to a second account.
+- Never modify or delete existing playlists: the only writes are creating a new playlist and adding tracks to it, and following (subscribing to) someone else's playlist the user ticked when moving to a second account.
 - Tokens live only in `%APPDATA%\music-transfer\`. `config.json` (Spotify client ID) sits next to the app, written by the app after a successful Spotify login (other keys kept); no hardcoded client ID. Tests never write it (`tests\test_gui.py` stubs `save_config`).
 - No proxy code; requests uses `HTTPS_PROXY` or the Windows proxy by itself.
 - No new dependencies without asking (`requirements.txt` is pinned).
