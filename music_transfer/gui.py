@@ -676,6 +676,7 @@ class MainWindow(QMainWindow):
 
 def run():
     app = QApplication(sys.argv)
+    update.cleanup()
     theme.apply(app)
     w = MainWindow()
     theme.dark_title_bar(w)

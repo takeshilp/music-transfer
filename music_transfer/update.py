@@ -61,6 +61,15 @@ def download(asset, progress=lambda done, total: None):
     return path
 
 
+def cleanup():
+    """Removes installers a past update left in %TEMP%: a running installer cannot delete itself."""
+    for f in Path(tempfile.gettempdir()).glob("MusicTransfer-Setup-*.exe"):
+        try:
+            f.unlink()
+        except OSError:  # right after an update the installer may still be finishing: the next start gets it
+            pass
+
+
 def install(path):
     """Runs the installer without windows; it closes this app if still open, updates it and starts it again
     (installer.iss: /UPDATE=1). The caller quits right after."""

@@ -55,6 +55,15 @@ def test_latest_refuses(monkeypatch, resp, text):
         update.latest()
 
 
+def test_cleanup_removes_only_our_old_installers(monkeypatch, tmp_path):
+    monkeypatch.setattr(update.tempfile, "gettempdir", lambda: str(tmp_path))
+    ours, other = tmp_path / "MusicTransfer-Setup-0.2.1.exe", tmp_path / "other-setup.exe"
+    ours.write_bytes(b"x")
+    other.write_bytes(b"x")
+    update.cleanup()
+    assert not ours.exists() and other.exists()
+
+
 def test_download_checks_size_and_sha256(monkeypatch, tmp_path):
     monkeypatch.setattr(update.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(update.requests, "get", lambda *a, **k: Resp(body=BODY))
