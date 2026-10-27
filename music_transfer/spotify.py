@@ -213,9 +213,11 @@ class SpotifyService:
     def search_isrc(self, isrc):
         return self._search(f"isrc:{isrc}")
 
-    def create_playlist(self, name, tracks):
-        """Creates a new private playlist; never writes to any id it did not just create."""
-        pid = self._call(self._sp.current_user_playlist_create, name, public=False, write=True)["id"]
+    def create_playlist(self, name, tracks, private=False):
+        """Creates a new playlist (public unless private); never writes to any id it did not just create."""
+        pid = self._call(self._sp.current_user_playlist_create, name, public=not private, write=True)["id"]
+        if private:  # create ignores public=false (live 2026-10-28); before the tracks, so a failure leaves it empty
+            self._call(self._sp.playlist_change_details, pid, public=False)  # idempotent: safe to retry, unlike create/add
         ids = [t.id for t in tracks]
         for i in range(0, len(ids), 100):  # API max per request
             self._call(self._sp.playlist_add_items, pid, ids[i:i + 100], write=True)

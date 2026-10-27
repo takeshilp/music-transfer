@@ -32,7 +32,7 @@ class Target:
             return []
         return [Track(self.same.get(n, "x" + n), f"Song {n}", [artist], 200000)]
 
-    def create_playlist(self, name, tracks):
+    def create_playlist(self, name, tracks, private=False):
         if self.fail_on == len(self.created) + 1:
             raise RuntimeError("boom")
         self.created.append((name, [t.id for t in tracks]))

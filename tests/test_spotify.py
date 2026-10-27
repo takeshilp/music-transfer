@@ -52,13 +52,23 @@ class FakeSp:
     def playlist_add_items(self, pid, ids):
         self.calls.append(("add", pid, len(ids)))
 
+    def playlist_change_details(self, pid, public=None):
+        self.calls.append(("change", pid, public))
+
+
+def test_private_playlist_is_made_private_before_tracks_are_added():
+    svc = SpotifyService(CID)
+    svc._sp = FakeSp()
+    svc.create_playlist("N", [Track("i", "s", ["a"])], private=True)
+    assert svc._sp.calls == [("create", "N", False), ("change", "NEW", False), ("add", "NEW", 1)]
+
 
 def test_create_playlist_chunks_to_the_new_playlist_only():
     svc = SpotifyService(CID)
     svc._sp = FakeSp()
     pid = svc.create_playlist("N", [Track(f"i{i}", "s", ["a"]) for i in range(250)])
     assert pid == "NEW"
-    assert svc._sp.calls == [("create", "N", False), ("add", "NEW", 100), ("add", "NEW", 100), ("add", "NEW", 50)]
+    assert svc._sp.calls == [("create", "N", True), ("add", "NEW", 100), ("add", "NEW", 100), ("add", "NEW", 50)]
 
 
 def test_create_playlist_does_not_repeat_write_after_server_error():
@@ -70,7 +80,7 @@ def test_create_playlist_does_not_repeat_write_after_server_error():
     svc._sp = Failing()
     with pytest.raises(AppError, match="временно недоступен"):
         svc.create_playlist("N", [Track("i", "s", ["a"])])
-    assert svc._sp.calls == [("create", "N", False), ("add", "NEW", 1)]
+    assert svc._sp.calls == [("create", "N", True), ("add", "NEW", 1)]
 
 
 def test_start_disables_urllib3_retries_so_429_reaches_our_layer(monkeypatch):

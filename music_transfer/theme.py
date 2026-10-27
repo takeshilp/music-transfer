@@ -59,11 +59,11 @@ QListWidget, QTableWidget { background: transparent; border: none; color: #fffff
 QListWidget::item { padding: 7px 8px; border-radius: 6px; }
 QListWidget::item:hover { background: #242424; }
 QListWidget::item:selected { background: #2a2a2a; color: #ffffff; }
-QAbstractItemView::indicator {
+QAbstractItemView::indicator, QCheckBox::indicator {
     width: 14px; height: 14px; border: 2px solid #727272; border-radius: 4px; background: transparent;
 }
-QAbstractItemView::indicator:hover { border-color: #ffffff; }
-QAbstractItemView::indicator:checked { background: #1db954; border-color: #1db954; image: url("@ASSETS/check.svg"); }
+QAbstractItemView::indicator:hover, QCheckBox::indicator:hover { border-color: #ffffff; }
+QAbstractItemView::indicator:checked, QCheckBox::indicator:checked { background: #1db954; border-color: #1db954; image: url("@ASSETS/check.svg"); }
 QTableWidget { selection-background-color: #2a2a2a; selection-color: #ffffff; }
 QTableWidget::item { padding: 0 8px; border-bottom: 1px solid #222222; }
 QHeaderView { background: transparent; }
@@ -75,8 +75,8 @@ QTableCornerButton::section { background: transparent; border: none; }
 
 QGroupBox { border: none; margin-top: 20px; color: #b3b3b3; font-weight: 600; }
 QGroupBox::title { subcontrol-origin: margin; left: 0; padding: 0; }
-QRadioButton { color: #ffffff; spacing: 8px; }
-QRadioButton:disabled { color: #6a6a6a; }
+QRadioButton, QCheckBox { color: #ffffff; spacing: 8px; }
+QRadioButton:disabled, QCheckBox:disabled { color: #6a6a6a; }
 QRadioButton::indicator { width: 14px; height: 14px; border: 2px solid #727272; border-radius: 9px; background: transparent; }
 QRadioButton::indicator:hover { border-color: #ffffff; }
 QRadioButton::indicator:checked { width: 8px; height: 8px; border: 5px solid #1db954; background: #121212; }

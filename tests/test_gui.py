@@ -22,6 +22,7 @@ class Fake:
         self.name, self._playlists, self._tracks, self.catalog = name, playlists, tracks, catalog
         self.connected, self.on_wait, self.on_main = False, None, []
         self.created, self.followed, self.fail_on, self._n, self.hold = [], [], None, 0, False
+        self.private = []
         self.account, self.account_id, self.restored = account, account or name, restored
 
     @property
@@ -71,11 +72,12 @@ class Fake:
         self._net()
         return [t for t in self.catalog if strip_tags(t.title) == title]
 
-    def create_playlist(self, name, tracks):
+    def create_playlist(self, name, tracks, private=False):
         self._net()
         self._n += 1
         if self.fail_on == self._n:
             raise RuntimeError("boom")
+        self.private.append(private)
         self.created.append((name, [t.id for t in tracks]))
         return "id"
 
@@ -273,9 +275,11 @@ def test_moving_to_a_second_account_copies_tracks_and_follows_picked_subscriptio
     w.find_btn.click()
     settle(w)
     assert column(w, 3) == ["копия", "копия", "копия", "подписка"]
+    w.private.setChecked(True)
     w.go_btn.click()
     settle(w)
     assert sp2.created == [("Старое", ["s1", "s2"]), ("P", ["s3"])] and sp2.followed == ["f1"]
+    assert sp2.private == [True, True]
     assert sp.created == [] and not w.go_btn.isEnabled() and not any(sp2.on_main) and dialogs == []
     w.dst.setCurrentIndex(1)  # another service: subscriptions cannot be passed there
     w.dst.activated.emit(1)
@@ -358,6 +362,7 @@ def test_pasted_token_is_the_fallback(services):
 def test_find_shows_matches_then_transfer_creates_new_playlists(services, dialogs, monkeypatch, tmp_path):
     sp, ya = services
     w = window()
+    assert not w.private.isChecked()
     assert [w.src.itemText(i) for i in range(w.src.count())] == ["Spotify", "Яндекс Музыка"]
     assert [w.dst.itemText(i) for i in range(w.dst.count())] == ["Яндекс Музыка"]
     assert [w.list.item(r).text() for r in range(w.list.count())] == ["Любимые треки (2)", "P (1)"]
@@ -371,7 +376,7 @@ def test_find_shows_matches_then_transfer_creates_new_playlists(services, dialog
     assert w.status.text() == "Ожидание api.music.yandex.net: 5 с"
     w.go_btn.click()
     settle(w)
-    assert ya.created == [("Любимые треки", ["y1"]), ("P", ["y3"])]
+    assert ya.created == [("Любимые треки", ["y1"]), ("P", ["y3"])] and ya.private == [False, False]
     assert [w.table.horizontalHeaderItem(c).text() for c in range(3)] == ["Плейлист", "Добавлено", "Не найдено"]
     assert [column(w, c) for c in range(3)] == [["Любимые треки", "P"], ["1", "1"], ["1", "0"]]
     assert not w.go_btn.isEnabled()
@@ -398,9 +403,11 @@ def test_changes_invalidate_results_and_merged_name_is_read_at_write(services):
     w.find_btn.click()
     settle(w)
     w.name.setText("Все треки")
+    w.private.setChecked(True)
+    assert w.go_btn.isEnabled()  # the switch does not drop the results
     w.go_btn.click()
     settle(w)
-    assert ya.created == [("Все треки", ["y1", "y3"])]
+    assert ya.created == [("Все треки", ["y1", "y3"])] and ya.private == [True]
     w.src.setCurrentIndex(1)
     w.src.activated.emit(1)
     settle(w)

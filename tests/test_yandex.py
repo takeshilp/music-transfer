@@ -55,11 +55,13 @@ def test_create_playlist_chains_revision_and_position():
     svc._client = c
     tracks = [Track(str(i), "s", ["a"], album_id=str(i + 1000)) for i in range(150)]
     assert svc.create_playlist("N", tracks) == "55"
-    assert c.calls[0] == ("create", "N", "private")
+    assert c.calls[0] == ("create", "N", "public")
     (_, k1, d1, r1), (_, k2, d2, r2) = c.calls[1:]
     assert (k1, k2, r1, r2) == (55, 55, 1, 2)
     assert (d1[0]["at"], len(d1[0]["tracks"])) == (0, 100) and (d2[0]["at"], len(d2[0]["tracks"])) == (100, 50)
     assert d1[0]["tracks"][0] == {"id": "0", "albumId": "1000"}
+    svc.create_playlist("M", [], private=True)
+    assert c.calls[-1] == ("create", "M", "private")
 
 
 def test_tracks_fetches_missing_models_keeps_order_skips_removed():

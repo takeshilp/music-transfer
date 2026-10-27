@@ -22,7 +22,7 @@ Project: the repository folder (the one with `CLAUDE.md`); run everything from t
 ## Live check (milestone 4)
 
 - Only with the user's go, on their accounts, while they watch.
-- The app only creates a new playlist and adds tracks; a test run uses a small source playlist. Never delete or edit an existing playlist, not even to clean up after a test; tell the user which playlist was created.
+- The app only creates a new playlist and adds tracks (and marks it private when asked); a test run uses a small source playlist. Never delete or edit an existing playlist, not even to clean up after a test; tell the user which playlist was created.
 - Record what worked and the API behaviour seen in `docs\api-facts.md` / `docs\bugs.md`, with the date.
 
 ## Build (milestone 5)

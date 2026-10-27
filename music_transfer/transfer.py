@@ -53,7 +53,7 @@ def copy_jobs(jobs):
         job.results = [(t, t if t.id and t.available else None, "копия") for t in job.tracks]
 
 
-def write_jobs(jobs, target, progress=_noop):
+def write_jobs(jobs, target, progress=_noop, private=False):
     """create_playlist is the only write here (the GUI also follows playlists): existing ones are never touched."""
     for i, job in enumerate(jobs):
         if job.added is not None:  # written by an earlier run that failed later: do not create it twice
@@ -62,7 +62,7 @@ def write_jobs(jobs, target, progress=_noop):
         if job.dedup:
             found = dedup(found, lambda t: t.id)
         try:
-            target.create_playlist(job.name, found)
+            target.create_playlist(job.name, found, private=private)
         except Exception as e:
             raise AppError(f"Плейлист «{job.name}»: {e} Готово плейлистов: {i} из {len(jobs)}; "
                            "этот мог создаться частично.") from e
