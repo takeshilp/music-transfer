@@ -1,9 +1,12 @@
+import threading
+import time
+
 import pytest
 import requests
 from spotipy.exceptions import SpotifyException
 from yandex_music.exceptions import NetworkError, TimedOutError
 
-from music_transfer.common import AppError, call_with_retry, load_config, save_config
+from music_transfer.common import AppError, Cancelled, call_with_retry, load_config, save_config
 
 
 def flaky(*errors, result="ok"):
@@ -146,3 +149,25 @@ def test_save_config_keeps_other_keys_and_creates_file(tmp_path):
     assert load_config(p) == {"spotify_client_id": "b", "other": 1}
     with pytest.raises(AppError, match="Не удалось сохранить"):
         save_config({"x": 1}, tmp_path / "missing" / "c.json")
+
+
+def test_stop_cuts_a_429_wait_short_and_cancels_reads():
+    stop, calls = threading.Event(), []
+
+    def fn():
+        calls.append(1)
+        raise r429("300")
+    t = time.monotonic()
+    with pytest.raises(Cancelled):
+        call_with_retry(fn, "h", on_wait=lambda h, s: stop.set(), stop=stop)
+    assert len(calls) == 1 and time.monotonic() - t < 5
+    fn2 = flaky()
+    with pytest.raises(Cancelled):
+        call_with_retry(fn2, "h", stop=stop)
+
+
+def test_writes_ignore_stop():
+    stop, slept = threading.Event(), []
+    stop.set()
+    assert call_with_retry(flaky(r429("3")), "h", sleep=slept.append, write=True, stop=stop) == "ok"
+    assert slept == [3]

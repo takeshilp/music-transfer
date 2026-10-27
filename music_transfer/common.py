@@ -59,6 +59,10 @@ def save_config(changes, path=CONFIG_PATH):
         raise AppError(f"Не удалось сохранить {path}: {e}") from e
 
 
+class Cancelled(Exception):
+    """«Отмена» was pressed: the run stops at its next read, 429 wait or progress step. Not an error."""
+
+
 def _retry_after(e):
     """Seconds to wait if e is a rate limit, else None."""
     if getattr(e, "http_status", None) == 429:  # SpotifyException
@@ -70,11 +74,16 @@ def _retry_after(e):
         return DEFAULT_WAIT
 
 
-def call_with_retry(fn, host, sleep=time.sleep, on_wait=None, write=False):
+def call_with_retry(fn, host, sleep=time.sleep, on_wait=None, write=False, stop=None):
     """Run fn, waiting out 429s (on_wait(host, seconds) is told before each wait); network errors become AppError.
 
-    write=True: a write is never repeated after a masked 5xx, it could create a duplicate."""
+    write=True: a write is never repeated after a masked 5xx, it could create a duplicate.
+    stop (threading.Event): once set, a read raises Cancelled before its next try and a 429 wait ends at once;
+    a write ignores it, so «Отмена» never leaves a playlist half-written."""
+    stop = None if write else stop
     for attempt in range(TRIES):
+        if stop and stop.is_set():
+            raise Cancelled()
         try:
             return fn()
         except Exception as e:
@@ -96,4 +105,7 @@ def call_with_retry(fn, host, sleep=time.sleep, on_wait=None, write=False):
                 raise AppError(f"Превышен лимит запросов {host}, повторите через {max(1, ceil(wait / 60))} мин.") from e
             if on_wait:
                 on_wait(host, wait)
-            sleep(wait)
+            if stop:
+                stop.wait(wait)  # returns at once on «Отмена»; the next try raises Cancelled
+            else:
+                sleep(wait)

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from .common import AppError, Track
 from .matching import dedup, find_match
 
-_noop = lambda done, total: None  # progress(done, total) runs in the worker thread
+_noop = lambda done, total: None  # progress(done, total) runs in the worker thread and may raise Cancelled: call it only between whole units, never inside a write
 
 
 @dataclass

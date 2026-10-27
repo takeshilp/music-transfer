@@ -7,7 +7,7 @@ from spotipy.cache_handler import CacheFileHandler
 from spotipy.exceptions import SpotifyException, SpotifyOauthError
 from spotipy.oauth2 import SpotifyPKCE
 
-from .common import APP_DIR, LIKED, AppError, Playlist, Track, call_with_retry
+from .common import APP_DIR, LIKED, AppError, Cancelled, Playlist, Track, call_with_retry
 
 API_HOST = "api.spotify.com"
 AUTH_HOST = "accounts.spotify.com"
@@ -105,6 +105,7 @@ class SpotifyService:
                            cache_handler=CacheFileHandler(cache_path=str(self._cache)))
         self._sp = self._me = self.account = None
         self.on_wait = None  # optional on_wait(host, seconds): the GUI shows the wait (rate limit or a server-error retry)
+        self.stop = None  # threading.Event set by the GUI for a run with «Отмена»: reads stop, 429 waits end
 
     @property
     def connected(self):
@@ -149,7 +150,11 @@ class SpotifyService:
             call_with_retry(lambda: self._auth.get_access_token(code, check_cache=False), AUTH_HOST, on_wait=self.on_wait)
         except SpotifyOauthError as e:
             raise AppError(f"Spotify не выдал токен: {e.error_description or e.error}") from e
-        self._start()
+        try:
+            self._start()
+        except Cancelled:
+            self.disconnect()  # the exchange already cached the token: a cancelled login must not come back at the next start
+            raise
         return True
 
     def disconnect(self):
@@ -158,7 +163,7 @@ class SpotifyService:
 
     def _call(self, fn, *a, write=False, **kw):
         try:
-            return call_with_retry(lambda: fn(*a, **kw), API_HOST, on_wait=self.on_wait, write=write)
+            return call_with_retry(lambda: fn(*a, **kw), API_HOST, on_wait=self.on_wait, write=write, stop=self.stop)
         except SpotifyOauthError as e:
             if e.error in ("invalid_grant", "login_required"):
                 self.disconnect()

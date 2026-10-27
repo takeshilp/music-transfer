@@ -9,25 +9,34 @@ from PySide6.QtWidgets import (QApplication, QDialog, QFileDialog, QFrame, QGrid
                                QWidget, QComboBox)
 
 from . import __version__, theme, update
-from .common import CONFIG_PATH, LIKED, AppError, load_config, save_config
+from .common import CONFIG_PATH, LIKED, AppError, Cancelled, load_config, save_config
 from .spotify import CLIENT_ID, REDIRECT_URI, SpotifyService
 from .transfer import build_jobs, copy_jobs, export_csv, match_jobs, write_jobs
 from .yandex import TOKEN_URL, YandexService
 
 
 class Worker(QThread):
-    """Runs fn(progress) off the UI thread; progress(text, done, total), the result and errors come back as signals."""
+    """Runs fn(progress) off the UI thread; progress(text, done, total), the result and errors come back as signals.
+
+    progress raises Cancelled once the stop event is set; a cancelled run ends with done(None)."""
     progress = Signal(str, int, int)
     done = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, fn):
+    def __init__(self, fn, stop=None):
         super().__init__()  # no parent: the window keeps the only reference
-        self.fn = fn
+        self.fn, self.stop = fn, stop
+
+    def _step(self, text, done, total):
+        if self.stop and self.stop.is_set():
+            raise Cancelled()
+        self.progress.emit(text, done, total)
 
     def run(self):
         try:
-            self.done.emit(self.fn(self.progress.emit))
+            self.done.emit(self.fn(self._step))
+        except Cancelled:
+            self.done.emit(None)
         except AppError as e:
             self.failed.emit(str(e))
         except Exception as e:  # a bug, not a user error: keep the app alive and say what broke
@@ -305,7 +314,7 @@ class MainWindow(QMainWindow):
         self.bar.setTextVisible(False)
         self.bar.setVisible(False)
         self.cancel_btn.setVisible(False)
-        self.cancel_btn.clicked.connect(lambda: self.stop.set())
+        self.cancel_btn.clicked.connect(self._cancel)
         self.update_btn = QPushButton("Проверить обновление")
         self.update_btn.clicked.connect(self._check_update)
         self.statusBar().addWidget(self.status, 1)
@@ -315,12 +324,19 @@ class MainWindow(QMainWindow):
 
     # --- background work: functions passed to _run run in the worker thread and must never touch widgets ---
 
+    def _cancel(self):
+        self.stop.set()
+        self.cancel_btn.setEnabled(False)  # the run stops at its next step; a playlist being written is finished first
+        self.status.setText("Отмена…")
+
     def _run(self, text, fn, on_done=lambda _: None, stop=None):
-        """stop: a threading.Event the work checks; «Отмена» is shown only when it is given (login waits)."""
+        """stop: a threading.Event the work checks; «Отмена» is shown only when it is given (logins, find, transfer).
+        A cancelled run ends with on_done(None)."""
         if self.worker:
             self.worker.wait()  # the last thread may still be returning from run(); dropping it while running aborts the process
-        self.on_done, self.worker, self.stop = on_done, (w := Worker(fn)), stop
+        self.on_done, self.worker, self.stop = on_done, (w := Worker(fn, stop)), stop
         for s in self.services:  # services call on_wait from the worker thread
+            s.stop = stop  # reset on every run, so a set event never leaks into the next one
             s.on_wait = lambda host, sec: w.progress.emit(f"Ожидание {host}: {ceil(sec)} с", 0, 0)
         w.progress.connect(self._progress)
         w.done.connect(self._done)
@@ -338,6 +354,7 @@ class MainWindow(QMainWindow):
         self.update_btn.setEnabled(not on)  # in the status bar, outside the central widget
         self.bar.setVisible(on)
         self.cancel_btn.setVisible(on and self.stop is not None)
+        self.cancel_btn.setEnabled(True)
 
     @Slot(str, int, int)
     def _progress(self, text, done, total):  # total 0 = indeterminate (login, waits)
@@ -367,7 +384,9 @@ class MainWindow(QMainWindow):
             if ask != QMessageBox.StandardButton.Yes:
                 e.ignore()
                 return
-            os._exit(1)  # a running QThread at interpreter exit aborts the process (0xC0000409) and the core has no cancel
+            # a running QThread at interpreter exit aborts the process (0xC0000409); «Отмена» is no substitute: not every run
+            # has one, and it waits for the request in flight and the playlist being written
+            os._exit(1)
 
     # --- accounts and pickers ---
 
@@ -449,7 +468,6 @@ class MainWindow(QMainWindow):
             s.disconnect()
             self._refresh()
         else:
-            # shortcut: only login waits can be cancelled (the core has no stop for long runs); add one if users ask
             self._login(SP_WAIT, lambda stop: s.connect(stop=stop))
 
     def _show_guide(self):
@@ -599,9 +617,13 @@ class MainWindow(QMainWindow):
             else:
                 match_jobs(jobs, dst, lambda d, n: progress("Поиск треков", d, n))
             return jobs, follows, own
-        self._run("Чтение плейлистов…" if same else "Поиск треков…", work, self._found)
+        self._run("Чтение плейлистов…" if same else "Поиск треков…", work, self._found, threading.Event())
 
     def _found(self, result):
+        if result is None:  # «Отмена»: partial matches are dropped, nothing was written
+            self._invalidate()
+            self.status.setText("Отменено. В аккаунты ничего не записано.")
+            return
         self.jobs, self.follows, self.own = result
         self.followed_done = False
         rows = [(j.name, _fmt(s), _fmt(f) if f else "не найдено", how) for j in self.jobs for s, f, how in j.results]
@@ -627,15 +649,25 @@ class MainWindow(QMainWindow):
             for i, p in enumerate([] if done else follows):  # a repeated follow is harmless, so a rerun does them all
                 dst.follow(p)
                 progress("Подписки", i + 1, len(follows))
-        self._run("Создание плейлистов…", work, lambda _: self._written(dst))
+            return True
+        self._run("Создание плейлистов…", work, lambda ok: self._written(dst, ok), threading.Event())
 
-    def _written(self, dst):
-        self.followed_done = True
-        self._show(["Плейлист", "Добавлено", "Не найдено"], [(j.name, j.added, len(j.not_found())) for j in self.jobs]
-                   + [(p.name, "подписка оформлена", "") for p in self.follows])
-        follows = f", подписок — {len(self.follows)}" if self.follows else ""
-        self.status.setText(f"Готово ({dst.label}): новых плейлистов — {len(self.jobs)}{follows}. "
-                            "Существующие плейлисты не изменялись.")
+    def _written(self, dst, ok):
+        """ok is None after «Отмена»: written jobs keep `added`, so «Перенести» goes on with the rest."""
+        if ok is None and all(j.added is not None for j in self.jobs) and not self.follows:
+            ok = True  # «Отмена» came during the last playlist: everything is written
+        self.followed_done = bool(ok)
+        self._show(["Плейлист", "Добавлено", "Не найдено"],
+                   [(j.name, "не создан" if j.added is None else j.added, len(j.not_found())) for j in self.jobs]
+                   + [(p.name, "подписка оформлена" if ok else "не завершено", "") for p in self.follows])
+        if ok:
+            follows = f", подписок — {len(self.follows)}" if self.follows else ""
+            text = f"Готово ({dst.label}): новых плейлистов — {len(self.jobs)}{follows}."
+        else:
+            made = sum(j.added is not None for j in self.jobs)
+            text = (f"Отменено ({dst.label}): новых плейлистов — {made} из {len(self.jobs)}. "
+                    "«Перенести» продолжит с оставшихся.")
+        self.status.setText(f"{text} Существующие плейлисты не изменялись.")
 
     # --- updates: the latest GitHub release's installer, run silently; it restarts the app ---
 

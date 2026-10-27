@@ -422,3 +422,69 @@ def test_failed_transfer_reports_and_rerun_skips_written(services, dialogs):
     w.go_btn.click()
     settle(w)
     assert [n for n, _ in ya.created] == ["Любимые треки", "P"]
+
+
+def test_find_can_be_cancelled_and_drops_its_results(services, dialogs):
+    sp, ya = services
+    w = window()
+    tick_all(w)
+    searched, real = [], ya.search
+
+    def search(artist, title):
+        searched.append(title)
+        assert w.stop.wait(10)  # held until «Отмена»
+        return real(artist, title)
+    ya.search = search
+    w.find_btn.click()
+    assert not w.cancel_btn.isHidden() and w.cancel_btn.isEnabled()
+    wait_for(lambda: searched)
+    w.cancel_btn.click()
+    assert not w.cancel_btn.isEnabled()
+    settle(w)
+    assert len(searched) == 1 and w.jobs is None and w.table.rowCount() == 0
+    assert "Отменено" in w.status.text() and w.cancel_btn.isHidden() and not w.go_btn.isEnabled()
+    assert ya.created == [] and dialogs == []
+
+
+def test_cancelled_transfer_finishes_the_current_playlist_and_rerun_continues(services, dialogs):
+    sp, ya = services
+    w = window()
+    tick_all(w)
+    w.find_btn.click()
+    settle(w)
+    real = ya.create_playlist
+
+    def create(name, tracks):
+        assert w.stop.wait(10)  # held until «Отмена»
+        return real(name, tracks)
+    ya.create_playlist = create
+    w.go_btn.click()
+    w.cancel_btn.click()
+    settle(w)
+    assert ya.created == [("Любимые треки", ["y1"])]
+    assert column(w, 1) == ["1", "не создан"]
+    assert "1 из 2" in w.status.text() and w.go_btn.isEnabled() and dialogs == []
+    ya.create_playlist = real
+    w.go_btn.click()
+    settle(w)
+    assert [n for n, _ in ya.created] == ["Любимые треки", "P"] and "Готово" in w.status.text()
+
+
+def test_cancel_during_the_last_playlist_reports_done(services, dialogs):
+    sp, ya = services
+    w = window()
+    w.list.item(0).setCheckState(Qt.CheckState.Checked)
+    w.find_btn.click()
+    settle(w)
+    real = ya.create_playlist
+
+    def create(name, tracks):
+        assert w.stop.wait(10)  # held until «Отмена»
+        return real(name, tracks)
+    ya.create_playlist = create
+    w.go_btn.click()
+    w.cancel_btn.click()
+    settle(w)
+    assert ya.created == [("Любимые треки", ["y1"])]
+    assert "Готово" in w.status.text() and "Отменено" not in w.status.text()
+    assert not w.go_btn.isEnabled() and dialogs == []

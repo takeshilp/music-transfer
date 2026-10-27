@@ -13,7 +13,7 @@ Entry format: Symptom → Cause → Fix → Verified (date, how).
 
 - Symptom: the app (or a test) exits with code -1073740791 and no Python traceback.
 - Cause: Qt aborts when a `QThread` is destroyed or the interpreter exits while the thread still runs.
-- Fix: keep the only reference to the worker in the window, `wait()` for the previous worker before replacing it, and in `closeEvent` confirm and `os._exit(1)` when a worker is running (the core has no cancel). Details in `docs\pyside6.md`.
+- Fix: keep the only reference to the worker in the window, `wait()` for the previous worker before replacing it, and in `closeEvent` confirm and `os._exit(1)` when a worker is running (a cancel cannot end a request in flight or a playlist being written). Details in `docs\pyside6.md`.
 - Verified 2026-10-27: probe script exiting with a running QThread gave the exit code above.
 
 ## Spotify search with `market=from_token` → 403 "Insufficient client scope"

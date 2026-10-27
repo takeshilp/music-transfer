@@ -8,7 +8,7 @@ import spotipy
 from spotipy.exceptions import SpotifyException, SpotifyOauthError
 
 from music_transfer import spotify
-from music_transfer.common import APP_DIR, LIKED, AppError, Playlist, Track
+from music_transfer.common import APP_DIR, LIKED, AppError, Cancelled, Playlist, Track
 from music_transfer.spotify import SpotifyService, _wait_for_code, track_from_item
 
 CID = "0123456789abcdef0123456789ABCDEF"
@@ -241,3 +241,24 @@ def test_wait_for_code_busy_port(monkeypatch):
         monkeypatch.setattr(spotify, "PORT", s.getsockname()[1])
         with pytest.raises(AppError, match="занят"):
             _wait_for_code("u", "S1", lambda url: None, timeout=1)
+
+
+def test_stop_cancels_reads_but_a_playlist_being_written_is_finished():
+    svc = SpotifyService(CID)
+    svc._sp, svc.stop = FakeSp(), threading.Event()
+    svc.stop.set()
+    assert svc.create_playlist("N", [Track("i1", "s", ["a"])]) == "NEW"
+    assert len(svc._sp.calls) == 2
+    with pytest.raises(Cancelled):
+        svc._call(lambda: "read")
+
+
+def test_cancel_right_after_the_token_exchange_drops_the_cached_token(monkeypatch):
+    svc = SpotifyService(CID)
+    svc.stop = threading.Event()
+    monkeypatch.setattr(svc._auth, "get_pkce_handshake_parameters", lambda: None)
+    monkeypatch.setattr(spotify, "_wait_for_code", lambda *a, **k: "code")
+    monkeypatch.setattr(svc._auth, "get_access_token", lambda *a, **k: (svc.stop.set(), svc._cache.write_text("{}")))
+    with pytest.raises(Cancelled):
+        svc.connect(open_url=lambda u: None)
+    assert not svc._cache.exists() and not svc.connected

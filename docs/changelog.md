@@ -6,6 +6,7 @@
 - The «Откуда» / «Куда» lists open below the box, rounded and dark like the rest of the window, without the bright green highlight.
 - New playlists are public on both services; Yandex ones used to be private. Spotify does not let apps make private playlists, so both now behave the same; close one by hand in the service's app if needed.
 - Installers left in `%TEMP%` by past updates are removed at start.
+- «Отмена» for «Найти треки» and «Перенести». A search stops right away, rate-limit waits included, and drops its results. A transfer finishes the playlist being written, shows which playlists were created, and «Перенести» continues with the rest.
 
 ## 0.2.1 — 2026-10-27
 

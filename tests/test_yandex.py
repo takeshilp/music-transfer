@@ -5,7 +5,7 @@ import pytest
 from yandex_music.exceptions import DeviceAuthError, NetworkError, UnauthorizedError
 
 from music_transfer import yandex
-from music_transfer.common import APP_DIR, LIKED, AppError, Playlist, Track
+from music_transfer.common import APP_DIR, LIKED, AppError, Cancelled, Playlist, Track
 from music_transfer.yandex import YandexService, parse_token, track_from_model
 
 
@@ -48,6 +48,9 @@ class FakeClient:
         self.calls.append(("change", kind, json.loads(diff), rev))
         self.rev += 1
         return NS(kind=kind, revision=self.rev)
+
+    def users_likes_playlists_add(self, pid):
+        self.calls.append(("follow", pid))
 
 
 def test_create_playlist_chains_revision_and_position():
@@ -181,3 +184,14 @@ def test_login_stopped_expired_or_denied(monkeypatch):
         login(monkeypatch, FakeOAuth([None], expires_in=0))
     with pytest.raises(AppError, match="не подтвердил вход"):
         login(monkeypatch, FakeOAuth([DeviceAuthError("access_denied")]))
+
+
+def test_stop_cancels_reads_but_a_playlist_being_written_is_finished():
+    svc, c = YandexService(), FakeClient()
+    svc._client, svc.stop = c, threading.Event()
+    svc.stop.set()
+    assert svc.create_playlist("N", [Track("1", "s", ["a"], album_id="2")]) == "55"
+    svc.follow(Playlist("77:3", "x", 1, followed=True))
+    assert [x[0] for x in c.calls] == ["create", "change", "follow"]
+    with pytest.raises(Cancelled):
+        svc._call(lambda: "read")

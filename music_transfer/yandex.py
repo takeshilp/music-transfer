@@ -42,6 +42,7 @@ class YandexService:
         self._client = self.account = None
         self._token_file = APP_DIR / ("yandex.json" if slot == 1 else f"yandex-{slot}.json")
         self.on_wait = None  # optional on_wait(host, seconds): the GUI shows the wait (rate limit or a server-error retry)
+        self.stop = None  # threading.Event set by the GUI for a run with «Отмена»: reads stop, 429 waits end
 
     @property
     def connected(self):
@@ -105,9 +106,9 @@ class YandexService:
         self._client = self.account = None
         self._token_file.unlink(missing_ok=True)
 
-    def _call(self, fn, *a, host=API_HOST, **kw):
+    def _call(self, fn, *a, host=API_HOST, write=False, **kw):
         try:
-            return call_with_retry(lambda: fn(*a, **kw), host, on_wait=self.on_wait)
+            return call_with_retry(lambda: fn(*a, **kw), host, on_wait=self.on_wait, write=write, stop=self.stop)
         except DeviceAuthError as e:  # expired_token, access_denied, ...
             raise AppError(f"Яндекс не подтвердил вход ({e}). Нажмите «Войти» ещё раз.") from e
         except UnauthorizedError as e:
@@ -131,7 +132,7 @@ class YandexService:
         return out
 
     def follow(self, playlist):
-        self._call(self._client.users_likes_playlists_add, playlist.id)
+        self._call(self._client.users_likes_playlists_add, playlist.id, write=True)
 
     def tracks(self, playlist):
         if playlist.id == LIKED:
@@ -157,13 +158,13 @@ class YandexService:
     def create_playlist(self, name, tracks):
         """Creates a new public playlist (like Spotify, which cannot make private ones); every write goes to the kind
         it just created."""
-        pl = self._call(self._client.users_playlists_create, name, visibility="public")
+        pl = self._call(self._client.users_playlists_create, name, visibility="public", write=True)
         if pl is None:
             raise AppError("Яндекс Музыка не создала плейлист")
         kind, rev, at = pl.kind, pl.revision, 0
         for i in range(0, len(tracks), ADD_CHUNK):
             chunk = tracks[i:i + ADD_CHUNK]
             diff = Difference().add_insert(at, [{"id": t.id, "album_id": t.album_id} for t in chunk]).to_json()
-            pl = self._call(self._client.users_playlists_change, kind, diff, rev)
+            pl = self._call(self._client.users_playlists_change, kind, diff, rev, write=True)
             rev, at = pl.revision, at + len(chunk)
         return str(kind)
