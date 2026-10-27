@@ -7,7 +7,7 @@ import requests
 from . import __version__
 from .common import AppError, call_with_retry
 
-REPO = "menemegod/music-transfer"  # release.ps1 stops if the logged-in GitHub account does not own it
+REPO = "takeshilp/music-transfer"  # release.ps1 stops if the logged-in GitHub account does not own it
 API_HOST = "api.github.com"
 LATEST = f"https://{API_HOST}/repos/{REPO}/releases/latest"
 DOWNLOADS = f"https://github.com/{REPO}/releases/download/"  # only our own release files are ever run
