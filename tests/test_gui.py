@@ -273,6 +273,8 @@ def test_moving_to_a_second_account_copies_tracks_and_follows_picked_subscriptio
     w.find_btn.click()
     settle(w)
     assert column(w, 3) == ["копия", "копия", "копия", "подписка"]
+    w.table.activated.emit(w.table.model().index(3, 0))  # a subscription row has nothing to pick
+    assert w.centralWidget().isEnabled()
     w.go_btn.click()
     settle(w)
     assert sp2.created == [("Старое", ["s1", "s2"]), ("P", ["s3"])] and sp2.followed == ["f1"]
@@ -418,6 +420,8 @@ def test_failed_transfer_reports_and_rerun_skips_written(services, dialogs):
     w.go_btn.click()
     settle(w)
     assert "«P»" in dialogs[-1] and "1 из 2" in dialogs[-1] and w.go_btn.isEnabled()
+    w.table.activated.emit(w.table.model().index(0, 0))  # that playlist exists already: its tracks are not picked again
+    assert "уже создан" in w.status.text() and w.centralWidget().isEnabled()
     ya.fail_on = None
     w.go_btn.click()
     settle(w)
@@ -488,3 +492,84 @@ def test_cancel_during_the_last_playlist_reports_done(services, dialogs):
     assert ya.created == [("Любимые треки", ["y1"])]
     assert "Готово" in w.status.text() and "Отменено" not in w.status.text()
     assert not w.go_btn.isEnabled() and dialogs == []
+
+
+def test_a_miss_is_picked_by_hand_for_every_copy_of_the_track(services, dialogs):
+    sp, ya = services
+    sp._tracks["p"] = sp._tracks["p"] + [sp._tracks[LIKED][1]]
+    # y2 is too long for the matcher and y9 is unavailable: the track stays a miss
+    ya.catalog += [Track("y2", "Unknown Song", ["Artist"], 600000), Track("y9", "Unknown Song", ["Artist"], 200000, available=False)]
+    w = window()
+    tick_all(w)
+    w.find_btn.click()
+    settle(w)
+    assert column(w, 2) == ["Кино — Группа крови", "не найдено", "Artist — Another Song", "не найдено"]
+    assert "Двойной щелчок" in w.status.text()
+    w.table.activated.emit(w.table.model().index(1, 0))
+    settle(w)
+    d = w.picker
+    assert d.isVisible() and d.artist.text() == "Artist" and d.title.text() == "Unknown Song"
+    assert [d.list.item(i).text() for i in range(d.list.count())] == \
+        ["Artist — Unknown Song · 10:00", "Artist — Unknown Song · 3:20 · недоступен"]
+    d.list.setCurrentRow(1)
+    d.pick_btn.click()
+    assert d.isVisible()  # an unavailable track cannot be chosen
+    d.list.setCurrentRow(0)
+    QTest.keyClick(d.list, Qt.Key.Key_Return)  # Enter picks, it does not search again
+    assert not d.isVisible()
+    assert column(w, 2)[1] == column(w, 2)[3] == "Artist — Unknown Song"
+    assert column(w, 3) == ["поиск", "вручную", "поиск", "вручную"]
+    assert "Найдено 4 из 4" in w.status.text() and not w.csv_btn.isEnabled()
+    w.go_btn.click()
+    settle(w)
+    assert ya.created == [("Любимые треки", ["y1", "y2"]), ("P", ["y3", "y2"])]
+    w.table.activated.emit(w.table.model().index(0, 0))  # the table is the summary now
+    assert w.centralWidget().isEnabled() and w.picker is d
+    assert not any(sp.on_main + ya.on_main) and dialogs == []
+
+
+def test_pick_search_again_skip_cancel_and_merged_dedup(services, dialogs, monkeypatch, tmp_path):
+    sp, ya = services
+    w = window()
+    tick_all(w)
+    w.merged.setChecked(True)
+    w.name.setText("Все")
+    w.find_btn.click()
+    settle(w)
+    assert column(w, 2) == ["Кино — Группа крови", "не найдено", "Artist — Another Song"]
+    real = ya.search
+    ya.search = lambda a, t: (w.stop.wait(10), real(a, t))[1]  # held until «Отмена»
+    w.table.activated.emit(w.table.model().index(1, 0))
+    w.cancel_btn.click()
+    settle(w)
+    assert w.picker is None
+    ya.search = real
+    w.table.activated.emit(w.table.model().index(1, 0))
+    settle(w)
+    first = w.picker
+    assert first.list.count() == 0
+    first.title.setText(strip_tags("Группа крови"))
+    first.search_btn.click()
+    settle(w)
+    d = w.picker
+    assert d is not first and d.list.count() == 1
+    d.list.setCurrentRow(0)
+    d.pick_btn.click()
+    assert column(w, 2)[1] == "Кино — Группа крови" and column(w, 3)[1] == "вручную"
+    w.table.activated.emit(w.table.model().index(2, 0))
+    settle(w)
+    w.picker.skip_btn.click()
+    assert column(w, 2)[2] == "не найдено" and column(w, 3)[2] == ""  # a wrong automatic match dropped
+    w.table.activated.emit(w.table.model().index(0, 0))
+    settle(w)
+    w.picker.reject()
+    assert column(w, 3)[0] == "поиск"
+    out = tmp_path / "nf.csv"
+    monkeypatch.setattr(gui.QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), ""))
+    w.csv_btn.click()
+    text = out.read_text(encoding="utf-8-sig")
+    assert "Another Song" in text and "Unknown Song" not in text
+    w.go_btn.click()
+    settle(w)
+    assert ya.created == [("Все", ["y1"])]
+    assert not any(ya.on_main) and dialogs == []

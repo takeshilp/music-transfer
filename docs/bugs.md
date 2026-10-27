@@ -50,3 +50,10 @@ Entry format: Symptom → Cause → Fix → Verified (date, how).
 - Cause: Spotify ignores `public: false` on create (a GET right after returned `public: true`) and on a follow-up `PUT /playlists/{id}`.
 - Fix: none possible through the API. A «закрытые плейлисты» option (check box, then a switch) was tried and dropped at the user's choice; both services now create public playlists (Yandex ones used to be private), so the app behaves the same either way. A user who wants it private closes it in the Spotify app.
 - Verified 2026-10-28: live, from sources with the private option on: the Spotify client showed the new playlist as public (the user's check).
+
+## List rows overlap when the QListWidget is filled before it has a parent
+
+- Symptom: in `PickDialog` the rows were 17 px apart while each row's rect was 31 px, so the selection or hover highlight covered half of the neighbour.
+- Cause: the app-level stylesheet (item padding) applies only once the widget is in a window hierarchy; items added to a parentless `QListWidget` get their size hint without the padding.
+- Fix: create it as `QListWidget(self)`, or add the items after it is in the layout.
+- Verified 2026-10-28: `visualItemRect` steps 0, 31, 62, 93 with the fix (17 before), and an offscreen screenshot with a row selected.

@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (QApplication, QDialog, QFileDialog, QFrame, QGrid
 from . import __version__, theme, update
 from .common import CONFIG_PATH, LIKED, AppError, Cancelled, load_config, save_config
 from .spotify import CLIENT_ID, REDIRECT_URI, SpotifyService
-from .transfer import build_jobs, copy_jobs, export_csv, match_jobs, write_jobs
+from .matching import strip_tags
+from .transfer import build_jobs, copy_jobs, export_csv, match_jobs, track_key, write_jobs
 from .yandex import TOKEN_URL, YandexService
 
 
@@ -57,6 +58,11 @@ def _fmt(t):
     return f"{', '.join(t.artists)} — {t.title}"
 
 
+def _line(t):
+    m, s = divmod(t.duration_ms // 1000, 60)
+    return " · ".join(x for x in (_fmt(t), t.album, f"{m}:{s:02d}") if x)
+
+
 def _card(title, content):
     """A rounded titled panel (QFrame#card in the theme) around a layout."""
     card, head = QFrame(), QLabel(title)
@@ -80,6 +86,7 @@ SP_WAIT = "Войдите в Spotify в открывшемся окне брау
 PER_NAME = "Название плейлиста из лайков (необязательно)"  # per-playlist mode: the liked tracks' playlist
 MERGED_NAME = "Название нового плейлиста"
 FOLLOW_HEAD = "Подписки на чужие плейлисты"
+PICK, SEARCH, SKIP = 1, 2, 3  # PickDialog results; PICK is QDialog's Accepted, 0 (Rejected) is «Отмена»
 CREATE_APP_URL = "https://developer.spotify.com/dashboard/create"
 DASHBOARD_URL = "https://developer.spotify.com/dashboard"
 APP_FORM = (("App name", "Music Transfer"),  # the Dashboard form's fields; app names may not contain "Spotify"
@@ -157,6 +164,68 @@ class SecondAccountGuide(QDialog):
                           "«Не вы?» и войдите во второй аккаунт."))  # nbsp: keep «Не вы?» on one line
 
 
+class PickDialog(QDialog):
+    """Manual match for one source track: the target's search results, unavailable ones listed but not choosable.
+    Closes with PICK, SKIP or SEARCH (artist/title edited); the search itself runs in the window's worker."""
+
+    def __init__(self, parent, src, artist, title, found):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)  # each «Искать» makes a new dialog; hidden ones hold ~1 MB each
+        self.setWindowTitle("Выбор трека")
+        self.setMinimumWidth(640)
+        head = QLabel(f"Исходный трек: {_line(src)}")
+        head.setTextFormat(Qt.TextFormat.PlainText)  # titles come from public catalogs: no rich text or links
+        head.setWordWrap(True)
+        self.artist, self.title, self.list = QLineEdit(artist), QLineEdit(title), QListWidget(self)  # parented first: the theme's item padding applies to rows added later
+        self.artist.setPlaceholderText("Исполнитель")
+        self.title.setPlaceholderText("Название")
+        self.search_btn, self.pick_btn = QPushButton("Искать"), QPushButton("Выбрать")
+        self.skip_btn, cancel = QPushButton("Не переносить"), QPushButton("Отмена")
+        self.search_btn.setDefault(True)  # Enter in a field searches
+        self.pick_btn.setProperty("accent", True)
+        self.skip_btn.setToolTip("Трек не попадёт в новый плейлист и останется в списке ненайденных")
+        for t in found:
+            item = QListWidgetItem(_line(t) if t.available else f"{_line(t)} · недоступен")
+            item.setData(Qt.ItemDataRole.UserRole, t)
+            if not t.available:
+                item.setFlags(Qt.ItemFlag.NoItemFlags)  # cannot be added to a playlist
+            self.list.addItem(item)
+        self.list.setCurrentRow(next((r for r, t in enumerate(found) if t.available), -1))  # «Выбрать» works at once
+        self.list.itemActivated.connect(self._choose)  # double click and Enter (Enter would otherwise press «Искать»)
+        self.search_btn.clicked.connect(lambda: self.done(SEARCH))
+        self.pick_btn.clicked.connect(self._choose)
+        self.skip_btn.clicked.connect(lambda: self.done(SKIP))
+        cancel.clicked.connect(self.reject)
+        query = QHBoxLayout()
+        query.addWidget(self.artist, 1)
+        query.addWidget(self.title, 2)
+        query.addWidget(self.search_btn)
+        buttons = QHBoxLayout()
+        buttons.addWidget(self.skip_btn)
+        buttons.addStretch()
+        buttons.addWidget(cancel)
+        buttons.addWidget(self.pick_btn)
+        v = QVBoxLayout(self)
+        v.setContentsMargins(20, 20, 20, 20)
+        v.setSpacing(12)
+        v.addWidget(head)
+        v.addLayout(query)
+        v.addWidget(self.list)
+        if not found:
+            v.addWidget(_hint("Ничего не найдено. Измените исполнителя или название и нажмите «Искать»."))
+        v.addLayout(buttons)
+
+    def picked(self):
+        """The chosen track, or None (nothing chosen, or unavailable: setCurrentRow still reaches a disabled item)."""
+        item = self.list.currentItem()
+        t = item.data(Qt.ItemDataRole.UserRole) if item else None
+        return t if t and t.available else None
+
+    def _choose(self, *_):
+        if self.picked():
+            self.done(PICK)
+
+
 class MainWindow(QMainWindow):
     code_ready = Signal(str, str)  # Yandex device code and page, emitted from the worker thread
 
@@ -174,7 +243,8 @@ class MainWindow(QMainWindow):
         self.yandex, self.yandex2 = YandexService(), YandexService(2)
         self.services = [s for s in (self.spotify, self.spotify2, self.yandex, self.yandex2) if s is not None]
         self.worker = self.jobs = self.follows = self.pair = self.loaded = self.on_done = self.stop = None
-        self.guide = self.guide2 = None
+        self.guide = self.guide2 = self.picker = None
+        self.rows = []  # match-table row -> (job, index into job.results), for _pick
         self.playlists, self.own, self.opened, self.followed_done = [], [], set(), False
         self.code_ready.connect(self._show_code)
         QApplication.clipboard().dataChanged.connect(self._clipboard_changed)
@@ -290,6 +360,7 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(False)
+        self.table.activated.connect(lambda i: self._pick(i.row()))  # double click or Enter
         self.csv_btn = QPushButton("Сохранить ненайденные в CSV")
         self.csv_btn.clicked.connect(self._save_csv)
         right = QVBoxLayout()
@@ -585,6 +656,7 @@ class MainWindow(QMainWindow):
     def _invalidate(self):
         self.jobs = self.follows = None
         self.followed_done = False
+        self.rows = []
         self.table.setRowCount(0)
         self._update_buttons()
 
@@ -626,13 +698,67 @@ class MainWindow(QMainWindow):
             return
         self.jobs, self.follows, self.own = result
         self.followed_done = False
-        rows = [(j.name, _fmt(s), _fmt(f) if f else "не найдено", how) for j in self.jobs for s, f, how in j.results]
+        self.rows = [(j, i) for j in self.jobs for i in range(len(j.results))]  # table row -> result, for _pick
         # shortcut: QTableWidget filled on the UI thread; fine for a few thousand rows, switch to a model if it stalls
         self._show(["Плейлист", "Исходный трек", "Найдено", "Способ"],
-                   rows + [(p.name, "чужой плейлист", "подписаться", "подписка") for p in self.follows])
-        found = sum(1 for r in rows if r[2] != "не найдено")
+                   [self._row(j, i) for j, i in self.rows]
+                   + [(p.name, "чужой плейлист", "подписаться", "подписка") for p in self.follows])
+        self._count()
+
+    def _row(self, job, i):
+        s, f, how = job.results[i]
+        return job.name, _fmt(s), _fmt(f) if f else "не найдено", how
+
+    def _count(self):
+        total = sum(len(j.results) for j in self.jobs)
+        found = sum(f is not None for j in self.jobs for _, f, _ in j.results)
         follows = f" Подписок: {len(self.follows)}." if self.follows else ""
-        self.status.setText(f"Найдено {found} из {len(rows)}.{follows} В аккаунты ничего не записано.")
+        hint = " Двойной щелчок по строке — выбрать трек вручную." if found < total else ""
+        clean = " В аккаунты ничего не записано." if all(j.added is None for j in self.jobs) else ""  # after a failed transfer
+        self.status.setText(f"Найдено {found} из {total}.{follows}{hint}{clean}")
+
+    def _pick(self, row, query=None):
+        """Double-click on a result row: search the target for that track in the worker, then PickDialog."""
+        if row >= len(self.rows):  # a subscription, or the summary after a transfer
+            return
+        job, i = self.rows[row]
+        if job.added is not None:  # written by a transfer that failed later: existing playlists are never touched
+            self.status.setText(f"Плейлист «{job.name}» уже создан — его треки не меняются.")
+            return
+        src, dst = job.results[i][0], self.dst.currentData()
+        artist, title = query or ((src.artists or [""])[0], src.title)  # the matcher's query first
+
+        def work(progress):
+            found = dst.search(artist, strip_tags(title)) if artist or title else []
+            progress("Поиск вариантов", 0, 0)  # raises Cancelled if «Отмена» came during the request
+            return found
+        self._run("Поиск вариантов…", work,
+                  lambda found: self._count() if found is None else self._show_pick(row, artist, title, found),
+                  threading.Event())  # «Отмена» leaves the status empty, so restore it
+
+    def _show_pick(self, row, artist, title, found):
+        job, i = self.rows[row]
+        self.picker = d = PickDialog(self, job.results[i][0], artist, title, found)
+        d.finished.connect(lambda code: self._picked(row, d, code))
+        self._count()
+        d.open()  # window-modal and returns at once: no nested event loop
+
+    def _picked(self, row, d, code):
+        if code == SEARCH:
+            self._pick(row, (d.artist.text().strip(), d.title.text().strip()))
+            return
+        if code not in (PICK, SKIP):  # «Отмена», Esc, the close button
+            return
+        job, i = self.rows[row]
+        found = d.picked() if code == PICK else None
+        k, how = track_key(job.results[i][0]), "вручную" if found else ""
+        for r, (j, n) in enumerate(self.rows):  # the same source track elsewhere gets the same pick, as in match_jobs
+            if j.added is None and track_key(j.results[n][0]) == k:
+                j.results[n] = (j.results[n][0], found, how)
+                for c, v in enumerate(self._row(j, n)):
+                    self.table.item(r, c).setText(v)
+        self._count()
+        self._update_buttons()  # the CSV button follows not_found()
 
     def _transfer(self):
         jobs, follows, dst, done = self.jobs, self.follows, self.dst.currentData(), self.followed_done
@@ -654,6 +780,7 @@ class MainWindow(QMainWindow):
 
     def _written(self, dst, ok):
         """ok is None after «Отмена»: written jobs keep `added`, so «Перенести» goes on with the rest."""
+        self.rows = []  # the table is the summary now: nothing to pick
         if ok is None and all(j.added is not None for j in self.jobs) and not self.follows:
             ok = True  # «Отмена» came during the last playlist: everything is written
         self.followed_done = bool(ok)
