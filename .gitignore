@@ -1,0 +1,12 @@
+# The repository is public: no secrets, no personal notes
+config.json
+build-prompt.md
+.claude/settings.local.json
+
+# Environments, caches, build output (the installer goes to GitHub releases, not into git)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
